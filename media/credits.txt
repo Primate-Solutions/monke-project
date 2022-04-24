@@ -1,0 +1,16 @@
+fart.ogg: https://freesound.org/people/DSISStudios/sounds/241000/
+splat.ogg: https://freesound.org/people/gprosser/sounds/360942/
+swooshes.ogg: concatenation of https://freesound.org/people/qubodup/sounds/59988/ and https://freesound.org/people/qubodup/sounds/60023/
+uhOh.ogg: audio from https://www.youtube.com/watch?v=FveF-we6lcE
+sadTrombone.ogg: https://freesound.org/people/Benboncan/sounds/73581/
+yay.ogg: https://freesound.org/people/avajoliec/sounds/617526/
+bonk.ogg: https://freesound.org/people/thecoolcookie17/sounds/573047/
+lemonke.png: edit of https://www.deviantart.com/oof9/art/Le-Monke-Full-Body-814863167
+fredokaOne.otf: https://fonts.google.com/specimen/Fredoka+One
+coconut.png: https://pngimg.com/image/9136
+apple.png: https://pngimg.com/image/12455
+banana.png: https://pngimg.com/image/841
+monkeyCry.ogg: https://freesound.org/people/befig/sounds/458396/
+
+dung.png: author of this proj
+monkey.png: author of this proj
