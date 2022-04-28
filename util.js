@@ -1,4 +1,22 @@
-'use strict';
+"use strict";
+
+class Rect {
+  constructor(width, height) {
+    this.x = 0;
+    this.y = 0;
+    this.w = width;
+    this.h = height;
+  }
+
+  intersect(rect) {
+    return (
+      this.x < rect.x + rect.w &&
+      this.x + this.w > rect.x &&
+      this.y < rect.y + rect.h &&
+      this.h + this.y > rect.y
+    );
+  }
+};
 
 // Interpolate smoothly between start and stop.
 // More info: https://en.wikipedia.org/wiki/Smoothstep
