@@ -84,9 +84,7 @@ class Monkey {
 
     this.displayRotationRad = 0;
 
-    this.dungs = new Group(
-      (dung) => !dung.hit && dung.position.y + dung.size.y > 0
-    );
+    this.dungs = new Dungs();
     this.dungThrownAtMs = 0;
   }
 
@@ -134,7 +132,9 @@ class Monkey {
     const error = random(-errorMag, errorMag);
     const direction = p5.Vector.sub(targetPosition, position).heading() + error;
     const velocity = createVector(cos(direction), sin(direction));
-    this.dungs.list.push(new Dung(position, velocity));
+    const displayUnder = velocity.y < 0;
+    this.dungs.list.push(new Dung(position, velocity, displayUnder));
+
     this.dungThrownAtMs = millis();
     this.constructor.throwSound.play(
       random(Object.keys(this.constructor.throwSoundSprites))
@@ -162,7 +162,8 @@ class Monkey {
   }
 
   display() {
-    this.dungs.display();
+    this.dungs.displayUnder();
+
     this.healthBar.display();
 
     push();
@@ -175,6 +176,8 @@ class Monkey {
     imageMode(CENTER);
     image(this.constructor.image, 0, 0, this.size.x, this.size.y);
     pop();
+
+    this.dungs.displayOver();
   }
 
   isDead() {
@@ -451,12 +454,15 @@ class Dung extends Item {
     this.size = createVector(this.image.width, this.image.height);
   }
 
-  constructor(position, velocity) {
+  constructor(position, velocity, displayUnder) {
     super(position, velocity, -1);
+
     this.constructor.image.setFrame(
       floor(random(this.constructor.numImageFrames - 1))
     );
     this.image = this.constructor.image.get();
+
+    this.displayUnder = displayUnder;
   }
 
   display() {
@@ -556,6 +562,28 @@ class Group {
   display() {
     for (const el of this.list) {
       el.display();
+    }
+  }
+}
+
+class Dungs extends Group {
+  constructor() {
+    super((dung) => !dung.hit && dung.position.y + dung.size.y > 0);
+  }
+
+  displayUnder() {
+    for (const dung of this.list) {
+      if (dung.displayUnder) {
+        dung.display();
+      }
+    }
+  }
+
+  displayOver() {
+    for (const dung of this.list) {
+      if (!dung.displayUnder) {
+        dung.display();
+      }
     }
   }
 }
