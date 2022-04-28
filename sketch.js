@@ -1,162 +1,220 @@
-"use strict";
+// "use strict";
 
 console.debug(
-  "Press Shift + D to enable debug mode controls, and see checkDebugMode() for details."
+  "Press Shift + D to enable debug mode controls (see keyPressed() for details)."
 );
 console.info("Have fun!");
 
-class Monkey {
-  // JSHint in editor.p5js.org doesn't support static here yet.
-  // jshint ignore:start
-  static spritesheet;
+// Globals.
 
-  static throwSound;
+const gameStages = ["start", "controls", "play", "end"];
+
+let audioMuted = false;
+let debugModeOn = false;
+let gameStartCounter = 0;
+
+// Init in preload().
+let font;
+
+// Init in setup().
+let fartSound;
+let winSound;
+let loseSound;
+let backgroundColor;
+let fontColor1;
+let fontColor2;
+let fontColor3;
+let greenColor;
+let redColor;
+
+// Init in startGame().
+let gameStage;
+let gameWon;
+let ySpawnMargin;
+let yMoveMargin;
+let monkey;
+let lemonke;
+let itemRain;
+let shakeEffect;
+let centerX;
+let centerY;
+let playStartedAtMs;
+let playDuration;
+let hasNewBestTime;
+
+class Monkey {
+  // JSHint in editor.p5js.org doesn't yet support the use of static below.
+  // jshint ignore:start
+  static image;
+
   static crySound;
+  static throwSound;
 
   static throwSoundSprites = {
     1: [0, 277],
     2: [277, 383],
   };
 
-  static spriteWidth = 200; // width of a sprite in monkey.png
-  static spriteHeight = 230; // height of a sprite in monkey.png
-  static width = Monkey.spriteWidth * 0.35;
-  static height = Monkey.spriteHeight * 0.35;
-
   static maxHp = 10;
   // jshint ignore:end
 
-  constructor(x, y) {
-    this.x = x;
-    this.y = y;
-    this.spriteX = 0;
-    this.spriteY = 0;
-    this.facingLeft = true;
-    this.lastDungThrownAtMs = 0;
-    this.dungs = [];
-    this.hp = Monkey.maxHp;
-    this.healthBar = new HealthBar(this.hp / Monkey.maxHp, false, greenColor);
+  static setupImage() {
+    this.image.pause();
+  }
+
+  constructor() {
+    this.facingDirection = -1; // -1 and 1 for left and right
+
+    this.size = getSizeFromImage(this.constructor.image);
+    this.position = createVector(
+      centerX - this.size.x / 2,
+      height - this.size.y - ySpawnMargin
+    );
+    this.velocity = createVector();
+
+    this.hp = this.constructor.maxHp;
+    this.healthBar = new HealthBar(
+      this.hp / this.constructor.maxHp,
+      false,
+      greenColor
+    );
+
     this.wasThrown = false;
-    this.throwDirection = null;
-    this.rotationRad = 0;
+    this.throwDirection = -1;
+
+    this.displayRotationRad = 0;
+
+    this.dungs = new Group(
+      (dung) => !dung.hit && dung.position.y + dung.size.y > 0
+    );
+    this.dungThrownAtMs = 0;
   }
 
-  throwDung() {
-    if (this.wasThrown) {
-      return;
+  checkControls() {
+    this.velocity.set(0, 0);
+    if (keyIsDown(LEFT_ARROW)) {
+      this.velocity.x = this.facingDirection = -1;
+    } else if (keyIsDown(RIGHT_ARROW)) {
+      this.velocity.x = this.facingDirection = 1;
     }
-
-    const cooldownMs = 100;
-    if (gameTimeMs - this.lastDungThrownAtMs < cooldownMs) {
-      return;
+    if (keyIsDown(UP_ARROW)) {
+      this.velocity.y = -1;
+    } else if (keyIsDown(DOWN_ARROW)) {
+      this.velocity.y = 1;
     }
+    this.velocity.setMag(0.5); // speed
 
-    this.dungs.push(new Dung(this));
-    this.lastDungThrownAtMs = gameTimeMs;
-    Monkey.throwSound.play(random(Object.keys(Monkey.throwSoundSprites)));
-  }
-
-  update() {
-    // X key
+    // Letter X.
     if (keyIsDown(88)) {
       this.throwDung();
     }
-
-    this.healthBar.update(this.hp / Monkey.maxHp);
-
-    this.move();
-
-    if (this.wasThrown) {
-      const translationSpeed = 1;
-      this.x += this.throwDirection * gameDeltaTimeMs * translationSpeed;
-      this.y -= gameDeltaTimeMs * translationSpeed;
-
-      const rotationSpeed = 0.05;
-      this.rotationRad += gameDeltaTimeMs * rotationSpeed;
-    }
-
-    this.dungs = Dung.cleanupInstances(this.dungs);
   }
 
-  move() {
+  throwDung() {
+    if (millis() - this.dungThrownAtMs < 100 || this.wasThrown) {
+      return;
+    }
+
+    const xMargin = 5;
+    const offset =
+      (this.facingDirection == -1 ? -xMargin : this.size.x - xMargin) -
+      Dung.size.x / 2;
+    const position = createVector(
+      constrain(this.position.x + offset, 0, width - Dung.size.x),
+      this.position.y - Dung.size.y * 0.75
+    );
+
+    const targetPosition = p5.Vector.add(
+      lemonke.position,
+      p5.Vector.div(lemonke.size, 2)
+    );
+    // FIXME: Tweak errorMag to encourage the player to move horizontally with
+    // lemonke.
+    const errorMag = max(0, 0.00167 * position.dist(targetPosition) + 0.03855);
+    const error = random(-errorMag, errorMag);
+    const direction = p5.Vector.sub(targetPosition, position).heading() + error;
+    const velocity = createVector(cos(direction), sin(direction));
+    this.dungs.list.push(new Dung(position, velocity));
+    this.dungThrownAtMs = millis();
+    this.constructor.throwSound.play(
+      random(Object.keys(this.constructor.throwSoundSprites))
+    );
+  }
+
+  update() {
+    this.dungs.update();
+
+    if (this.wasThrown) {
+      this.position.x += this.throwDirection * deltaTime;
+      this.position.y -= deltaTime;
+      this.displayRotationRad += deltaTime * 0.05;
+    } else {
+      this.position.add(p5.Vector.mult(this.velocity, deltaTime));
+      this.position.x = constrain(this.position.x, 0, width - this.size.x);
+      this.position.y = constrain(
+        this.position.y,
+        yMoveMargin,
+        height - this.size.y - yMoveMargin
+      );
+    }
+
+    this.healthBar.update(this.hp / this.constructor.maxHp);
+  }
+
+  display() {
+    this.dungs.display();
+    this.healthBar.display();
+
+    push();
+    translate(
+      this.position.x + this.size.x / 2,
+      this.position.y + this.size.y / 2
+    );
+    rotate(this.displayRotationRad);
+    this.constructor.image.setFrame(max(0, this.facingDirection));
+    imageMode(CENTER);
+    image(this.constructor.image, 0, 0, this.size.x, this.size.y);
+    pop();
+  }
+
+  isDead() {
+    return this.wasThrown ? abs(this.position.x) > width * 1.5 : this.hp === 0;
+  }
+
+  takeHit(hp) {
+    if (this.wasThrown && hp > 0) {
+      return;
+    }
+    this.hp = constrain(this.hp + hp, 0, this.constructor.maxHp);
+    if (hp < 0) {
+      shakeEffect.trigger();
+    }
+    this.healthBar.flash();
+  }
+
+  takeThrow() {
     if (this.wasThrown) {
       return;
     }
 
-    const speed = 0.5;
-    if (keyIsDown(LEFT_ARROW)) {
-      this.x -= speed * gameDeltaTimeMs;
-    } else if (keyIsDown(RIGHT_ARROW)) {
-      this.x += speed * gameDeltaTimeMs;
-    }
-    if (keyIsDown(UP_ARROW)) {
-      this.y -= speed * gameDeltaTimeMs;
-    } else if (keyIsDown(DOWN_ARROW)) {
-      this.y += speed * gameDeltaTimeMs;
-    }
-
-    // Make sure the monkey doesn't go out of the canvas.
-    this.x = constrain(this.x, 0, width - Monkey.width);
-    this.y = constrain(
-      this.y,
-      safeYMargin,
-      height - Monkey.height - safeYMargin
-    );
-
-    // Change the sprite of monkey so the monkey faces the direction it's moving towards.
-    if (keyIsDown(LEFT_ARROW) || keyIsDown(RIGHT_ARROW)) {
-      this.facingLeft = keyIsDown(LEFT_ARROW);
-      this.spriteX = this.facingLeft ? 0 : Monkey.spriteWidth;
-    }
-  }
-
-  draw() {
-    this.healthBar.draw();
-
-    push();
-    translate(this.x + Monkey.width / 2, this.y + Monkey.height / 2);
-    imageMode(CENTER);
-    rotate(this.rotationRad);
-    image(
-      Monkey.spritesheet,
-      0,
-      0,
-      Monkey.width,
-      Monkey.height,
-      this.spriteX,
-      this.spriteY,
-      Monkey.spriteWidth,
-      Monkey.spriteHeight
-    );
-    pop();
-  }
-
-  hasLost() {
-    return this.wasThrown ? abs(this.x) > width * 1.5 : this.hp === 0;
-  }
-
-  takeHit() {
-    this.hp = max(this.hp - 1, 0);
-    shakeEffect.shake();
-  }
-
-  takeThrow() {
     this.hp = 0;
     this.wasThrown = true;
     // Throw monkey towards opp. side of the screen.
-    this.throwDirection = this.x + Monkey.width / 2 > width / 2 ? -1 : 1;
-    shakeEffect.shake({ magnitude: 100 });
-    Monkey.crySound.play();
+    this.throwDirection = this.position.x + this.size.x / 2 > centerX ? -1 : 1;
+    this.constructor.crySound.play();
+    shakeEffect.trigger({ durationMs: 200, magnitude: 100 });
+    this.healthBar.flash();
   }
 }
 
+// TODO: Give Lemonke a special rock attack.
 class Lemonke {
   // jshint ignore:start
   static image;
-  static width = 252 * 0.5;
-  static height = 236 * 0.5;
-  static movementCooldownMs = 2000;
+
   static voiceSound;
+  static throwSound;
+
   static voiceSoundSprites = {
     fart: [1100, 403], // fart
     uhOh: [2402, 960], // uh oh
@@ -169,366 +227,446 @@ class Lemonke {
     evilHahah: [32125, 1765], // hah hahah
     pooEch: [55796, 2201], // poo echeh *dies*
   };
-  static randomSoundSprites = ["fart", "stinky", "poopAhah", "madePoopie", "funnyPoop"];
+
+  static randomSoundSprites = [
+    "fart",
+    "stinky",
+    "poopAhah",
+    "madePoopie",
+    "funnyPoop",
+  ];
   static hitSoundSprites = ["uhOh", "uhOh2", "oopsie"];
+
   static maxHp = 300;
   // jshint ignore:end
 
-  constructor(x, y) {
-    this.x = x;
-    this.y = y;
-    this.lastMovedAtMs = 0;
-    this.moveProgress = 0;
-    this.playNextSoundAtMs = gameTimeMs + random(4000, 8000);
-    this.lastHitAtMs = null;
-    this.hp = Lemonke.maxHp;    this.lastSpokeAtMs = 0;
+  constructor() {
+    this.size = getSizeFromImage(this.constructor.image);
+    this.position = createVector(centerX - this.size.x / 2, ySpawnMargin);
+    this.newPosition = this.position;
+
+    this.hp = this.constructor.maxHp;
+    this.healthBar = new HealthBar(
+      this.hp / this.constructor.maxHp,
+      true,
+      redColor
+    );
+
     this.shakeEffect = new ShakeEffect();
-    this.healthBar = new HealthBar(this.hp / Lemonke.maxHp, true, redColor);
+
+    this.lastHitAtMs = 0;
     this.hasWon = false;
 
-    this.moveTowardsNewPosition();
+    this.moveAtMs = 0;
+    this.movedAtMs = millis();
+
+    this.speakAtMs = millis() + 500;
+    this.spokeAtMs = 0;
+
+    this.setNextMoveTime();
   }
 
-  moveTowardsNewPosition() {
-    const xPadding = Lemonke.width * 0.3;
-    const topPadding = 30;
-    this.moveTowards = {
-      x: random(xPadding, width - Lemonke.width - xPadding),
-      y: random(safeYMargin + topPadding, height * 0.3 - safeYMargin),
-    };
+  setNextSpeakTime() {
+    this.speakAtMs = millis() + random(1000, 15000);
+  }
 
-    this.lastMovedAtMs = gameTimeMs;
-    this.moveProgress = 0;
+  setNextMoveTime() {
+    this.moveAtMs = millis() + random(4000, 8000);
   }
 
   update() {
+    if (millis() > this.moveAtMs) {
+      this.move();
+      this.setNextMoveTime();
+    }
+
+    if (millis() > this.speakAtMs) {
+      this.speakRandom(this.constructor.randomSoundSprites);
+      this.setNextSpeakTime();
+    }
+
+    const speedMs = 300;
+    this.position.lerp(
+      this.newPosition,
+      min(millis() - this.movedAtMs, speedMs) / speedMs
+    );
+
     this.healthBar.update(this.hp / Lemonke.maxHp);
-
-    if (
-      gameTimeMs - this.lastMovedAtMs > Lemonke.movementCooldownMs &&
-      !this.hasWon
-    ) {
-      this.moveTowardsNewPosition();
-    }
-
-    if (gameTimeMs > this.playNextSoundAtMs && !this.hasWon) {
-      if (this.moveProgress === 1) {
-        Lemonke.voiceSound.play(random(Lemonke.randomSoundSprites));
-        this.playNextSoundAtMs = gameTimeMs + random(4000, 8000);
-        this.lastSpokeAtMs = gameTimeMs;
-      }
-    }
-
-    this.x = lerp(this.x, this.moveTowards.x, this.moveProgress);
-    this.y = lerp(this.y, this.moveTowards.y, this.moveProgress);
-
-    this.moveProgress = Math.min(1, this.moveProgress + gameDeltaTimeMs / 1000);
+    this.shakeEffect.update();
   }
 
-  draw() {
+  move() {
+    const xMargin = this.size.x * 0.3;
+    const position = createVector(
+      random(xMargin, width - this.size.x - xMargin),
+      random(yMoveMargin + ySpawnMargin, height * 0.4 - yMoveMargin)
+    );
+    this.newPosition = position;
+    this.movedAtMs = millis();
+  }
+
+  speakRandom(sprites) {
+    if (millis() - this.spokeAtMs > 500) {
+      this.constructor.voiceSound.play(random(sprites));
+      this.spokeAtMs = millis();
+    }
+  }
+
+  display() {
     push();
-    this.shakeEffect.applyMatrix();
+    applyMatrix(
+      1,
+      0,
+      0,
+      1,
+      this.shakeEffect.transform.x,
+      this.shakeEffect.transform.y
+    );
 
-    this.healthBar.draw();
+    this.healthBar.display();
 
-    const tintAmount =
-      this.lastHitAtMs !== null
-        ? constrain(gameTimeMs - this.lastHitAtMs, 0, 255)
-        : 255;
-    tint(255, tintAmount, tintAmount);
-    image(Lemonke.image, this.x, this.y, Lemonke.width, Lemonke.height);
-    
+    if (this.lastHitAtMs) {
+      const amount = constrain(millis() - this.lastHitAtMs, 0, 255);
+      tint(255, amount, amount);
+    }
+    image(
+      this.constructor.image,
+      this.position.x,
+      this.position.y,
+      this.size.x,
+      this.size.y
+    );
     pop();
   }
 
-  hasLost() {
-    return this.hp === 0;
+  hasThrownMonkey() {
+    this.win();
+    this.constructor.throwSound.play();
   }
 
-  takeHit() {
-    this.hp = max(this.hp - 1, 0);
-    this.lastHitAtMs = gameTimeMs;
+  isDead() {
+    return this.hp === 0 && !this.hasWon;
+  }
 
-    const chancePct = 75;
-    const cooldownMs = 1000;
-    if (
-      random(100) > chancePct &&
-      gameTimeMs - this.lastSpokeAtMs > cooldownMs
-    ) {
-      this.lastSpokeAtMs = gameTimeMs;
-      Lemonke.voiceSound.play(random(Lemonke.hitSoundSprites));
+  takeHit(hp) {
+    this.hp = constrain(this.hp + hp, 0, this.constructor.maxHp);
+    if (hp < 0) {
+      this.lastHitAtMs = millis();
+      this.shakeEffect.trigger();
+    }
+    this.healthBar.flash();
+
+    if (millis() - this.spokeAtMs < 1000) {
+      return;
     }
 
-    this.shakeEffect.shake();
+    if (random(100) > 95) {
+      this.speakRandom(this.constructor.hitSoundSprites);
+    }
   }
 
-  lost() {
-    Lemonke.voiceSound.stop();
-    Lemonke.voiceSound.play("pooEch");
+  lose() {
+    this.constructor.voiceSound.stop();
+    this.constructor.voiceSound.play("pooEch");
   }
 
-  won() {
-    // This function might get called twice before the battle stage ends and
+  win() {
+    // This function might get called twice before the play stage ends and
     // evilHahah should only be played once.
     if (!this.hasWon) {
-      Lemonke.voiceSound.stop();
-      Lemonke.voiceSound.play("evilHahah");
+      this.constructor.voiceSound.stop();
+      this.constructor.voiceSound.play("evilHahah");
     }
     this.hasWon = true;
   }
 }
 
-class Dung {
-  // jshint ignore:start
-  static spritesheet;
-  static hitSound;
-  static spriteWidth = 32; // width of a sprite in dung.png
-  static spriteHeight = 32; // height of a sprite in dung.png
-  static width = Dung.spriteWidth * 0.75;
-  static height = Dung.spriteHeight * 0.75;
-  static numSprites = 4;
-  // jshint ignore:end
-
-  constructor(monkey) {
-    const xPadding = 5;
-    const relativePos =
-      -(Dung.width / 2) +
-      (monkey.facingLeft ? xPadding : Monkey.width - xPadding);
-    this.x = constrain(monkey.x + relativePos, 0, width - Dung.width);
-
-    this.y = monkey.y - Dung.height;
-    this.spriteNum = Math.floor(random(Dung.numSprites));
-    this.hit = false;
-  }
-
-  update() {
-    this.y -= gameDeltaTimeMs;
-  }
-
-  draw() {
-    image(
-      Dung.spritesheet,
-      this.x,
-      this.y,
-      Dung.width,
-      Dung.height,
-      this.spriteNum * Dung.spriteWidth,
-      0,
-      Dung.spriteWidth,
-      Dung.spriteHeight
-    );
-  }
-
-  takeHit() {
-    this.hit = true;
-    Dung.hitSound.play();
-  }
-
-  static cleanupInstances(dungs) {
-    return dungs.filter((dung) => !dung.hit && dung.y + Dung.height > 0);
-  }
-}
-
-class Thing {
+class Item {
   // jshint ignore:start
   static image;
   static hitSound;
   // jshint ignore:end
 
-  constructor(x, y) {
-    this.x = x;
-    this.y = y;
-    this.rotationRad = random(TWO_PI);
-    this.speed = 0.05;
-    this.rotationSpeed = random(0.005, 0.0005);
-    this.rotationDirection = random(-1, 1);
+  constructor(position, velocity, hp) {
+    this.size = getSizeFromImage(this.constructor.image);
+    this.position = position;
+    this.velocity = velocity;
+
+    this.hp = hp;
     this.hit = false;
+
+    this.displayRotationRad = 0;
+    this.displayRotationSpeedFactor = random(0.005, 0.0005);
+    this.displayRotationDirection = random(-1, 1);
   }
 
   update() {
-    this.y += gameDeltaTimeMs * this.speed;
-    this.rotationRad +=
-      this.rotationDirection * gameDeltaTimeMs * this.rotationSpeed;
+    this.position.add(p5.Vector.mult(this.velocity, deltaTime));
+
+    this.displayRotationRad +=
+      this.displayRotationDirection *
+      deltaTime *
+      this.displayRotationSpeedFactor;
   }
 
-  draw() {
+  display() {
     push();
-    translate(this.x + Thing.image.width / 2, this.y + Thing.image.width / 2);
+    translate(
+      this.position.x + this.size.x / 2,
+      this.position.y + this.size.y / 2
+    );
+    rotate(this.displayRotationRad);
     imageMode(CENTER);
-    rotate(this.rotationRad);
-    image(Thing.image, 0, 0);
+    image(this.constructor.image, 0, 0, this.size.x, this.size.y);
     pop();
   }
 
   takeHit() {
     this.hit = true;
-    Thing.hitSound.play();
+    this.constructor.hitSound.play();
+  }
+}
+
+class Coconut extends Item {
+  constructor(position, velocity) {
+    super(position, velocity, -1);
+  }
+}
+
+class Banana extends Item {
+  constructor(position, velocity) {
+    super(position, velocity, 1);
+  }
+}
+
+class Dung extends Item {
+  // jshint ignore:start
+  static numImageFrames;
+  static size;
+  // jshint ignore:end
+
+  static setupImage() {
+    this.image.pause();
+    this.numImageFrames = this.image.numFrames();
+    this.size = createVector(this.image.width, this.image.height);
   }
 
-  static spawnRow(things) {
-      let numColumns = ceil(width / (Monkey.width * 2));
-      let omitColumn = round(random(numColumns - 1));
-      for (let i = 0; i < numColumns; i++) {
-        if (omitColumn === i) {
-          continue;
-        }
-        let x = i * (Monkey.width * 2);
-        things.push(new Thing(x, -32));
-      }
+  constructor(position, velocity) {
+    super(position, velocity, -1);
+    this.constructor.image.setFrame(
+      floor(random(this.constructor.numImageFrames - 1))
+    );
+    this.image = this.constructor.image.get();
   }
 
-  static cleanupInstances(things) {
-    return things.filter((thing) => !thing.hit && thing.y < height);
+  display() {
+    image(
+      this.image,
+      this.position.x,
+      this.position.y,
+      this.size.x,
+      this.size.y
+    );
   }
 }
 
 class ShakeEffect {
-  // jshint ignore:start
-  static defaultProperties = {
-    durationMs: 200,
-    speed: 0.06,
-    magnitude: 10,
-  };
-  // jshint ignore:end
-
-  constructor(properties) {
-    Object.assign(this, ShakeEffect.defaultProperties);
-    Object.assign(this, properties);
-
-    this.shakeUntilMs = 0;
+  constructor() {
+    this.durationMs = 100;
+    this.magnitude = 15;
+    this.speed = 0.06;
+    this.transform = createVector();
+    this.stopAtMs = 0;
   }
 
-  shake(properties) {
-    if (this.shakeUntilMs < gameTimeMs) {
-      Object.assign(
-        this,
-        properties ? properties : ShakeEffect.defaultProperties
-      );
-      this.shakeUntilMs = gameTimeMs + this.durationMs;
-    }
+  update() {
+    const t = millis() * this.speed;
+    // FIXME: Use a mirrored exponential easing function to dampen shaking.
+    const damping = this.stopAtMs > millis() ? 1 : 0;
+    this.transform.x = (cos(t) / PI) * this.magnitude * damping;
+    this.transform.y = (sin(t) / PI) * this.magnitude * damping;
   }
 
-  applyMatrix() {
-    if (this.shakeUntilMs > gameTimeMs) {
-      applyMatrix(
-        1,
-        0,
-        0,
-        1,
-        (cos(gameTimeMs * this.speed) / PI) * this.magnitude,
-        (sin(gameTimeMs * this.speed) / PI) * this.magnitude
-      );
-    }
+  trigger(props) {
+    Object.assign(this, props);
+    this.stopAtMs = millis() + this.durationMs;
   }
 }
 
 class HealthBar {
-  // jshint:ignore start
+  // jshint ignore:start
   static height = 15;
-  // jshint:ignore end
+  static flashDurationMs = 200;
+  // jshint ignore:end
 
-  constructor(value, onTop, barColor) {
-    this.value = value; // expects value to range from 0 to 1
-    this.displayValue = value;
+  constructor(health, onTop, fillColor) {
+    this.health = health; // in the range [0, 1]
 
-    this.y = onTop ? 0 : height - HealthBar.height;
+    this.yPosition = onTop ? 0 : height - HealthBar.height;
+    this.width = width;
 
-    this.fillColor = barColor;
-    this.backgroundColor = lerpColor(
-      color(this.fillColor),
-      color(backgroundColor),
-      0.5
+    this.fillColor = fillColor;
+    this.emptyColor = lerpColor(this.fillColor, backgroundColor, 0.5);
+    colorMode(HSB);
+    this.flashColor = color(
+      hue(this.fillColor),
+      100,
+      brightness(this.fillColor)
     );
+    colorMode(RGB);
+
+    this.flashUntilMs = 0;
   }
 
-  update(value) {
-    this.value = value;
-    const speed = 0.03;
-    this.displayValue = moveTowards(this.displayValue, this.value, gameDeltaTimeMs * speed);
+  update(health) {
+    this.health = health;
+    this.width = moveTowards(this.width, this.health * width, deltaTime * 2);
   }
 
-  draw() {
-    fill(this.backgroundColor);
-    rect(0, this.y, width, HealthBar.height);
+  display() {
+    fill(this.emptyColor);
+    rect(0, this.yPosition, width, HealthBar.height);
 
-    fill(this.fillColor);
-    rect(0, this.y, width * this.value, HealthBar.height);
+    const lerpAmount =
+      max(0, this.flashUntilMs - millis()) / this.constructor.flashDurationMs;
+    fill(lerpColor(this.fillColor, this.flashColor, lerpAmount));
+    rect(0, this.yPosition, this.width, HealthBar.height);
+
+    noTint();
+  }
+
+  flash() {
+    this.flashUntilMs = millis() + this.constructor.flashDurationMs;
   }
 }
 
+class Group {
+  constructor(filterCallback) {
+    this.filterCallback = filterCallback;
+    this.list = [];
+  }
 
-const safeYMargin = HealthBar.height;
-const backgroundColor = [250, 245, 240];
-const fontColor1 = [143, 116, 96];
-const fontColor2 = [199, 145, 103];
-const fontColor3 = [230, 145, 103];
-const redColor = [191, 101, 101];
-const greenColor = [122, 191, 101];
-let isDebugModeOn = false;
-let gameStartCounter = 0;
-let centerX;
-let centerY;
-let font;
-let inputSound;
-let winSound;
-let loseSound;
-let rockImage;
+  update() {
+    for (const el of this.list) {
+      el.update();
+    }
+    this.list = this.list.filter(this.filterCallback);
+  }
 
-// Init by startGame().
-let isGamePaused;
-let isGameMuted;
-let isGameWon;
-let gameTimeMs;
-let gameDeltaTimeMs;
-let gameStage;
-let monkey;
-let lemonke;
-let shakeEffect;
-let spawnThingsRowAtMs;
-let rocks;
+  display() {
+    for (const el of this.list) {
+      el.display();
+    }
+  }
+}
+
+class ItemRain extends Group {
+  constructor() {
+    super((item) => !item.hit && item.position.y < height);
+
+    this.nextSpawnAtMs = 0;
+    this.startX = centerX;
+  }
+
+  spawnItem() {
+    let position = createVector(
+      pingPong(this.startX + millis() * 0.05 + random(-100, 100), width),
+      -30
+    );
+    let pos = p5.Vector.sub(monkey.position, position);
+    let direction = pos.heading();
+    direction += random(-0.15, 0.15); // add some error
+    const speed = 0.3;
+    const velocity = createVector(cos(direction), sin(direction)).setMag(speed);
+    if (random(100) > 90) {
+      this.list.push(new Banana(position, velocity));
+    } else {
+      this.list.push(new Coconut(position, velocity));
+    }
+    const min = 250;
+    const max = 1500;
+    const hpAdjustedMax = max - (1 - lemonke.hp / Lemonke.maxHp) * (max - min);
+    this.nextSpawnAtMs = millis() + random(min, hpAdjustedMax);
+  }
+
+  update() {
+    super.update();
+
+    if (this.nextSpawnAtMs < millis()) {
+      this.spawnItem();
+    }
+  }
+}
+
+function getSizeFromImage(image) {
+  return createVector(image.width, image.height);
+}
+
+function moveTowards(from, to, maxDelta) {
+  if (abs(to - from) <= maxDelta) {
+    return to;
+  }
+  return from + Math.sign(to - from) * maxDelta;
+}
 
 function preload() {
-  font = loadFont("media/fredokaOne.otf");
+  font = loadFont("assets/fredokaOne.otf");
 
-  Monkey.spritesheet = loadImage("media/monkey.png");
-  Lemonke.image = loadImage("media/lemonke.png");
-  Dung.spritesheet = loadImage("media/dung.png");
-  Thing.image = loadImage("media/coconut.png");
+  Monkey.image = loadImage("assets/monkey.gif");
+  Lemonke.image = loadImage("assets/lemonke.png");
+  Coconut.image = loadImage("assets/coconut.png");
+  Banana.image = loadImage("assets/banana.png");
+  Dung.image = loadImage("assets/dung.gif");
 }
 
 function setup() {
-  // The Howler audio library is used instead of p5.sound because of
+  Monkey.setupImage();
+  Dung.setupImage();
+
+  // FIXME: Prevent startGame() from running before all sounds are loaded.
+  //
+  // howler.js is used instead of p5.sound because of this issue:
   // https://github.com/processing/p5.js-sound/issues/284.
-  // Don't place calls to Howl() inside preload() because they will not block
-  // setup() from being called.
-  // TODO: Prevent game from starting until all sounds are loaded. Maybe load
-  // files using loadBytes in preload() and pass it to Howler() in a base64 data
-  // URI?
+  //
+  // Unlike loadSound(), calls to Howl() inside preload() will not block
+  // setup() from running, so don't place them there.
+  //
+  // Could the result of loadBytes() be turned into a base64 data URI and
+  // passed to Howl() as a source? This could improve/fix the loading issue.
+  fartSound = new Howl({ src: "assets/fart.ogg" });
+  winSound = new Howl({ src: "assets/yay.ogg" });
+  loseSound = new Howl({ src: "assets/sadTrombone.ogg" });
+  Monkey.crySound = new Howl({ src: "assets/monkeyCry.ogg" });
   Monkey.throwSound = new Howl({
-    src: "media/swooshes.ogg",
+    src: "assets/swooshes.ogg",
     sprite: Monkey.throwSoundSprites,
   });
-  Monkey.crySound = new Howl({ src: "media/monkeyCry.ogg" });
   Lemonke.voiceSound = new Howl({
-    src: "media/uhOh.ogg",
+    src: "assets/uhOh.ogg",
     sprite: Lemonke.voiceSoundSprites,
   });
-  Dung.hitSound = new Howl({ src: "media/splat.ogg" });
-  Thing.hitSound = new Howl({ src: "media/bonk.ogg" });
+  // TODO: Find a more impactful Lemonke.throwSound.
+  Lemonke.throwSound = new Howl({ src: "assets/stickSwoosh.ogg" });
+  Coconut.hitSound = new Howl({ src: "assets/bonk.ogg" });
+  Banana.hitSound = new Howl({ src: "assets/nom.ogg" });
+  Dung.hitSound = new Howl({ src: "assets/splat.ogg" });
 
-  inputSound = new Howl({ src: "media/fart.ogg" });
-  winSound = new Howl({ src: "media/yay.ogg" });
-  loseSound = new Howl({ src: "media/sadTrombone.ogg" });
+  backgroundColor = color(250, 245, 240);
+  fontColor1 = color(143, 116, 96);
+  fontColor2 = color(199, 145, 103);
+  fontColor3 = color(230, 145, 103);
+  greenColor = color(122, 191, 101);
+  redColor = color(191, 101, 101);
 
-  createCanvas(456, 608);
+  createCanvas(450, 600);
 
-  centerX = width / 2;
-  centerY = height / 2;
+  noStroke();
 
   textFont(font);
   textAlign(CENTER, CENTER);
 
-  noStroke(); // for rect()
+  centerX = width / 2;
+  centerY = height / 2;
 
   Howler.volume(0.1);
 
@@ -536,89 +674,108 @@ function setup() {
 }
 
 function startGame() {
-  // Stop sounds from previous game when starting over.
-  Howler.stop();
+  Howler.stop(); // for when starting over
+
+  gameStage = "start";
+  gameWon = false;
+
+  ySpawnMargin = 40;
+  yMoveMargin = HealthBar.height;
+
+  monkey = new Monkey();
+  lemonke = new Lemonke();
+  itemRain = new ItemRain();
+  shakeEffect = new ShakeEffect();
+
+  playStartedAtMs = 0;
+  playDuration = "";
+  hasNewBestTime = false;
 
   gameStartCounter += 1;
   if (gameStartCounter === 5) {
     console.info("＼(＾▽＾)／");
   }
-
-  isGamePaused = false;
-  isGameMuted = false;
-  isGameWon = false;
-  gameTimeMs = 0;
-  gameDeltaTimeMs = 0;
-  gameStage = "start";
-  shakeEffect = new ShakeEffect();
-  rocks = [];
-  spawnThingsRowAtMs = 0;
-
-  const yPadding = 40;
-  monkey = new Monkey(
-    (width - Monkey.width) / 2,
-    height - Monkey.height - yPadding
-  );
-  lemonke = new Lemonke((width - Lemonke.width) / 2, yPadding);
 }
 
+// TODO: Use P to pause and unpause the game, making sure to also pause and
+// unpause audio (and not just stop or mute it).
 function keyPressed() {
   switch (keyCode) {
     case ENTER:
-      if (gameStage == "start") {
-        gameStage = "beforeBattle";
-      } else if (gameStage == "beforeBattle") {
-        gameStage = "battle";
-      } else if (gameStage == "end") {
-        startGame();
-      } else {
-        return;
-      }
-      inputSound.play();
-      break;
-    case 77: // M key for mute
-      isGameMuted = !isGameMuted;
-      Howler.mute(isGameMuted);
-      break;
-    case 80: // P key for pause
-      isGamePaused = !isGamePaused;
-      if (isGamePaused) {
-        noLoop();
-        Howler.mute(true);
-      } else {
-        loop();
-        if (!isGameMuted) {
-          Howler.mute(false);
+      if (gameStage !== "play") {
+        const i = (gameStages.indexOf(gameStage) + 1) % gameStages.length;
+        if (gameStages[i] === "start") {
+          startGame();
+        } else {
+          gameStage = gameStages[i];
         }
+        fartSound.play();
       }
+      break;
+    case 77: // letter M for mute
+      audioMuted = !audioMuted;
+      Howler.mute(audioMuted);
       break;
     case 68: // letter D for debug
       if (keyIsDown(SHIFT)) {
-        isDebugModeOn = !isDebugModeOn;
-        console.debug("isDebugModeOn:", isDebugModeOn);
+        debugModeOn = !debugModeOn;
+        console.debug("debugModeOn:", debugModeOn);
       }
+      break;
+  }
+
+  if (!debugModeOn) {
+    return;
+  }
+
+  switch (keyCode) {
+    case 82: // letter R for restart
+      startGame();
+      break;
+    case 80: // letter P for play
+      startGame();
+      gameStage = "play";
+      break;
+    case 72: // letter H for hit
+      if (keyIsDown(SHIFT)) {
+        monkey.takeHit(-1);
+      } else {
+        lemonke.takeHit(-1);
+      }
+      break;
+    case 84: // letter T for throw
+      monkey.takeThrow();
+      break;
+    case 75: // letter K for kill
+      if (keyIsDown(SHIFT)) {
+        monkey.hp = 1;
+        monkey.takeHit(-1);
+      } else {
+        lemonke.hp = 1;
+        lemonke.takeHit(-1);
+      }
+      break;
+    case 83: // letter S for shake
+      shakeEffect.shake();
+      break;
+    case 66: // letter B for best
+      removeItem("bestTime"); // reset best time
+      break;
   }
 }
 
 function draw() {
-  if (!isGamePaused) {
-    // gameTimeMs and gameDeltaTimeMs allow the game to be paused, and slowed
-    // down if it cannot run above 30 FPS.
-    gameDeltaTimeMs = Math.min(deltaTime, (1 / 30) * 1000);
-    gameTimeMs += gameDeltaTimeMs;
-  }
-
-  checkDebugMode();
+  background(backgroundColor);
 
   switch (gameStage) {
     case "start":
       drawStart();
       break;
-    case "beforeBattle":
-      drawBeforeBattle();
+    case "controls":
+      drawControls();
       break;
-    case "battle":
-      drawBattle();
+    case "play":
+      drawPlay();
       break;
     case "end":
       drawEnd();
@@ -626,187 +783,165 @@ function draw() {
   }
 }
 
-function checkDebugMode() {
-  if (!isDebugModeOn) {
-    return;
-  }
-
-  // letter K for kill
-  if (keyIsDown(75)) {
-    if (keyIsDown(SHIFT)) {
-      monkey.hp = 1;
-      monkey.takeHit();
-    } else {
-      lemonke.hp = 1;
-      lemonke.takeHit();
-    }
-  }
-
-  // letter R for restart
-  if (keyIsDown(82)) {
-    startGame();
-  }
-
-  // letter S for shake
-  if (keyIsDown(83)) {
-    shakeEffect.shake();
-  }
-}
-
 function drawStart() {
-  background(backgroundColor);
-
   fill(fontColor1);
   textSize(38);
   text("Monke Project", centerX, centerY - 40);
 
   fill(fontColor2);
-  pingPongTextSize(24, 28);
+  animateTextSize(24, 28);
   text("Press Enter to start", centerX, centerY + 40);
 }
 
-function pingPongTextSize(from, to, speed = 0.001) {
-  textSize(smootherStep(from, to, pingPong(gameTimeMs * speed, 1)));
+function animateTextSize(min, max) {
+  textSize(smootherStep(min, max, pingPong(millis() * 0.001, 1)));
 }
 
-function drawBeforeBattle() {
-  background(backgroundColor);
+function pingPong(x, length) {
+  x = repeat(x, length * 2);
+  return length - abs(x - length);
+}
 
+function repeat(x, length) {
+  return constrain(x - floor(x / length) * length, 0, length);
+}
+
+// More info: https://en.wikipedia.org/wiki/Smoothstep.
+function smootherStep(from, to, x) {
+  x = constrain(x, 0, 1);
+  x = -2 * x * x * x + 3 * x * x;
+  return to * x + from * (1 - x);
+}
+
+function drawControls() {
   fill(fontColor1);
   textSize(38);
-  text("Controls", centerX, centerY - 100);
+  text("Controls", centerX, centerY - 85);
 
   fill(fontColor3);
   textSize(24);
-  text("Use arrow keys to move", centerX, centerY - 50);
-  text("Hold X to throw dung", centerX, centerY - 20);
-  text("Press P to pause", centerX, centerY + 10);
-  text("Press M to mute", centerX, centerY + 40);
+  text("Use arrow keys to move", centerX, centerY - 35);
+  text("Hold X to throw dung", centerX, centerY - 5);
+  text("Press M to toggle mute", centerX, centerY + 25);
 
   fill(fontColor2);
-  pingPongTextSize(24, 28);
-  text("Press Enter to play", centerX, centerY + 90);
+  animateTextSize(24, 28);
+  text("Press Enter to play", centerX, centerY + 75);
 }
 
-function drawBattle() {
-  background(backgroundColor);
-
-  push();
-  shakeEffect.applyMatrix();
-
-  if (spawnThingsRowAtMs < gameTimeMs) {
-    Thing.spawnRow(rocks);
-    spawnThingsRowAtMs = gameTimeMs + 3000;
+function drawPlay() {
+  if (!playStartedAtMs) {
+    playStartedAtMs = millis();
   }
 
-  for (const rock of rocks) {
-    rock.update();
-    checkRockMonkeyCollision(rock);
-    rock.draw();
-  }
+  monkey.checkControls();
 
-  rocks = Thing.cleanupInstances(rocks);
-
-  for (const dung of monkey.dungs) {
-    dung.update();
-    checkDungLemonkeCollision(dung);
-    dung.draw();
-  }
-
-  lemonke.update();
+  itemRain.update();
   monkey.update();
-  checkLemonkeMonkeyCollision();
+  lemonke.update();
+  shakeEffect.update();
 
+  checkMonkeyItemCollision();
+  checkLemonkeDungCollision();
+  checkLemonkeMonkeyCollision();
   checkWinOrLose();
 
-  lemonke.draw();
-  monkey.draw();
+  push();
+  applyMatrix(1, 0, 0, 1, shakeEffect.transform.x, shakeEffect.transform.y);
+
+  itemRain.display();
+  lemonke.display();
+  monkey.display();
 
   pop();
 }
 
+// TODO: Show how many bananas were caught by monkey.
 function drawEnd() {
-  background(backgroundColor);
+  if (!playDuration) {
+    const durationMs = millis() - playStartedAtMs;
+    if (durationMs >= 3600000) {
+      playDuration = "69:69";
+    } else {
+      playDuration = new Date(durationMs).toISOString().slice(14, -5);
+    }
+
+    const bestTime = getItem("bestTime");
+    if (gameWon && (!bestTime || bestTime > durationMs)) {
+      hasNewBestTime = true;
+      storeItem("bestTime", durationMs);
+    }
+  }
 
   fill(fontColor1);
   textSize(38);
-  text(isGameWon ? "You win!" : "Game over!", centerX, centerY - 40);
+  text(gameWon ? "You win!" : "Game over!", centerX, centerY - 65);
+
+  fill(fontColor3);
+  textSize(24);
+  text(
+    hasNewBestTime ? "You have a new best time!" : "Your time",
+    centerX,
+    centerY - 15
+  );
+  text(playDuration, centerX, centerY + 15);
 
   fill(fontColor2);
-  pingPongTextSize(24, 28);
-  text("Press Enter to start over", centerX, centerY + 40);
+  animateTextSize(24, 28);
+  text("Press Enter to start over", centerX, centerY + 60);
 }
 
-function checkLemonkeMonkeyCollision() {
-  const rect1 = {
-    x: monkey.x,
-    y: monkey.y,
-    width: Monkey.width,
-    height: Monkey.height,
-  };
-  const rect2 = {
-    x: lemonke.x,
-    y: lemonke.y,
-    width: Lemonke.width,
-    height: Lemonke.height,
-  };
-  if (!lemonke.hasWon && intersectRect(rect1, rect2)) {
-    monkey.takeThrow();
-    lemonke.won();
+function checkMonkeyItemCollision() {
+  for (const item of itemRain.list) {
+    if (
+      checkCollision(item.position, item.size, monkey.position, monkey.size)
+    ) {
+      item.takeHit();
+      monkey.takeHit(item.hp);
+    }
   }
 }
 
-function checkDungLemonkeCollision(dung) {
-  const rect1 = {
-    x: dung.x,
-    y: dung.y,
-    width: Dung.width,
-    height: Dung.height,
-  };
-  const rect2 = {
-    x: lemonke.x,
-    y: lemonke.y,
-    width: Lemonke.width,
-    height: Lemonke.height,
-  };
-  if (intersectRect(rect1, rect2)) {
-    dung.takeHit();
-    lemonke.takeHit();
-  }
-}
-
-function checkRockMonkeyCollision(rock) {
-  const rect1 = { x: rock.x, y: rock.y, width: 32, height: 32 };
-  const rect2 = {
-    x: monkey.x,
-    y: monkey.y,
-    width: Monkey.width,
-    height: Monkey.height,
-  };
-  if (intersectRect(rect1, rect2)) {
-    rock.takeHit();
-    monkey.takeHit();
-  }
-}
-
-// Return whether two axis-aligned rects intersect.
-function intersectRect(rect1, rect2) {
+// Check whether two axis-aligned rectangles intersect.
+function checkCollision(position1, size1, position2, size2) {
   return (
-    rect1.x < rect2.x + rect2.width &&
-    rect1.x + rect1.width > rect2.x &&
-    rect1.y < rect2.y + rect2.height &&
-    rect1.height + rect1.y > rect2.y
+    position1.x < position2.x + size2.x &&
+    position1.x + size1.x > position2.x &&
+    position1.y < position2.y + size2.y &&
+    size1.y + position1.y > position2.y
   );
 }
 
+function checkLemonkeDungCollision() {
+  for (const item of monkey.dungs.list) {
+    if (
+      checkCollision(item.position, item.size, lemonke.position, lemonke.size)
+    ) {
+      item.takeHit();
+      lemonke.takeHit(item.hp);
+    }
+  }
+}
+
+function checkLemonkeMonkeyCollision() {
+  if (
+    !lemonke.hasWon &&
+    checkCollision(monkey.position, monkey.size, lemonke.position, lemonke.size)
+  ) {
+    monkey.takeThrow();
+    lemonke.hasThrownMonkey();
+  }
+}
+
 function checkWinOrLose() {
-  if (lemonke.hasLost()) {
-    lemonke.lost();
-    winSound.play();
-    isGameWon = true;
-  } else if (monkey.hasLost()) {
-    lemonke.won();
+  if (monkey.isDead()) {
+    lemonke.win();
     loseSound.play();
+    gameWon = false;
+  } else if (lemonke.isDead()) {
+    lemonke.lose();
+    winSound.play();
+    gameWon = true;
   } else {
     return;
   }

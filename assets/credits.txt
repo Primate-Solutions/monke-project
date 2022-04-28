@@ -1,0 +1,17 @@
+apple.png: https://pngimg.com/image/12455
+banana.png: https://pngimg.com/image/841
+bonk.ogg: https://freesound.org/people/thecoolcookie17/sounds/573047/
+coconut.png: https://pngimg.com/image/9136
+dung.gif: author of this project, using Aseprite and GIMP
+fart.ogg: https://freesound.org/people/DSISStudios/sounds/241000/
+fredokaOne.otf: https://fonts.google.com/specimen/Fredoka+One
+lemonke.png: edit of https://www.deviantart.com/oof9/art/Le-Monke-Full-Body-814863167
+monkey.gif: author of this project, using GIMP
+monkeyCry.ogg: https://freesound.org/people/befig/sounds/458396/
+nom.ogg: https://freesound.org/people/TheDragonsSpark/sounds/543386/
+sadTrombone.ogg: https://freesound.org/people/Benboncan/sounds/73581/
+splat.ogg: https://freesound.org/people/gprosser/sounds/360942/
+stickSwoosh.ogg: https://freesound.org/people/Hitrison/sounds/216675/
+swooshes.ogg: concatenation of https://freesound.org/people/qubodup/sounds/59988/ and https://freesound.org/people/qubodup/sounds/60023/
+uhOh.ogg: audio from https://www.youtube.com/watch?v=FveF-we6lcE
+yay.ogg: https://freesound.org/people/avajoliec/sounds/617526/
