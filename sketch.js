@@ -263,7 +263,7 @@ class Lemonke {
     this.moveAtMs = 0;
     this.movedAtMs = millis();
 
-    this.speakAtMs = millis() + 500;
+    this.speakAtMs = 0;
     this.spokeAtMs = 0;
 
     this.setNextMoveTime();
