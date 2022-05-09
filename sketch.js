@@ -269,8 +269,12 @@ class Lemonke {
     this.setNextMoveTime();
   }
 
-  setNextSpeakTime() {
-    this.speakAtMs = millis() + random(1000, 15000);
+  setNextSpeakTime(timeMs) {
+    if (timeMs) {
+      this.speakAtMs = timeMs;
+    } else {
+      this.speakAtMs = millis() + random(1000, 15000);
+    }
   }
 
   setNextMoveTime() {
@@ -858,6 +862,8 @@ function drawControls() {
 function drawPlay() {
   if (!playStartedAtMs) {
     playStartedAtMs = millis();
+
+    lemonke.setNextSpeakTime(millis() + 500);
   }
 
   monkey.checkControls();
