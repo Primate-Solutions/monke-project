@@ -133,7 +133,7 @@ class Monkey {
     const direction = p5.Vector.sub(targetPosition, position).heading() + error;
     const velocity = createVector(cos(direction), sin(direction));
     const displayUnder = velocity.y < 0;
-    this.dungs.list.push(new Dung(position, velocity, displayUnder));
+    this.dungs.arr.push(new Dung(position, velocity, displayUnder));
 
     this.dungThrownAtMs = millis();
     this.constructor.throwSound.play(
@@ -537,8 +537,6 @@ class HealthBar {
       max(0, this.flashUntilMs - millis()) / this.constructor.flashDurationMs;
     fill(lerpColor(this.fillColor, this.flashColor, lerpAmount));
     rect(0, this.yPosition, this.width, HealthBar.height);
-
-    noTint();
   }
 
   flash() {
@@ -549,18 +547,18 @@ class HealthBar {
 class Group {
   constructor(filterCallback) {
     this.filterCallback = filterCallback;
-    this.list = [];
+    this.arr = [];
   }
 
   update() {
-    for (const el of this.list) {
+    for (const el of this.arr) {
       el.update();
     }
-    this.list = this.list.filter(this.filterCallback);
+    this.arr = this.arr.filter(this.filterCallback);
   }
 
   display() {
-    for (const el of this.list) {
+    for (const el of this.arr) {
       el.display();
     }
   }
@@ -572,7 +570,7 @@ class Dungs extends Group {
   }
 
   displayUnder() {
-    for (const dung of this.list) {
+    for (const dung of this.arr) {
       if (dung.displayUnder) {
         dung.display();
       }
@@ -580,7 +578,7 @@ class Dungs extends Group {
   }
 
   displayOver() {
-    for (const dung of this.list) {
+    for (const dung of this.arr) {
       if (!dung.displayUnder) {
         dung.display();
       }
@@ -597,19 +595,19 @@ class ItemRain extends Group {
   }
 
   spawnItem() {
-    let position = createVector(
+    const position = createVector(
       pingPong(this.startX + millis() * 0.05 + random(-100, 100), width),
       -30
     );
-    let pos = p5.Vector.sub(monkey.position, position);
-    let direction = pos.heading();
-    direction += random(-0.15, 0.15); // add some error
+    const error = random(-0.15, 0.15);
+    const direction =
+      p5.Vector.sub(monkey.position, position).heading() + error;
     const speed = 0.3;
     const velocity = createVector(cos(direction), sin(direction)).setMag(speed);
     if (random(100) > 90) {
-      this.list.push(new Banana(position, velocity));
+      this.arr.push(new Banana(position, velocity));
     } else {
-      this.list.push(new Coconut(position, velocity));
+      this.arr.push(new Coconut(position, velocity));
     }
     const min = 250;
     const max = 1500;
@@ -920,7 +918,7 @@ function drawEnd() {
 }
 
 function checkMonkeyItemCollision() {
-  for (const item of itemRain.list) {
+  for (const item of itemRain.arr) {
     if (
       checkCollision(item.position, item.size, monkey.position, monkey.size)
     ) {
@@ -941,7 +939,7 @@ function checkCollision(position1, size1, position2, size2) {
 }
 
 function checkLemonkeDungCollision() {
-  for (const item of monkey.dungs.list) {
+  for (const item of monkey.dungs.arr) {
     if (
       checkCollision(item.position, item.size, lemonke.position, lemonke.size)
     ) {
